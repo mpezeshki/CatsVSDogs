@@ -1,3 +1,4 @@
+# credits to Bart van Merrienboer
 from collections import OrderedDict
 
 import theano

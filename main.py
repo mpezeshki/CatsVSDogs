@@ -14,6 +14,9 @@ from blocks.initialization import IsotropicGaussian, Constant, Uniform
 import logging
 logging.basicConfig()
 
+serialize_path = '/data/lisatmp3/pezeshki/serialize'
+dumping_path = '/data/lisatmp3/pezeshki/dumps'
+
 
 x = tensor.tensor4('features')
 y = tensor.lmatrix('targets')

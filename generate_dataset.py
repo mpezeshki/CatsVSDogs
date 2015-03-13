@@ -7,7 +7,7 @@ import h5py
 import numpy
 from scipy import misc
 
-rng = numpy.random.RandomState(54321)
+rng = numpy.random.RandomState(123522)
 
 read_path = '/data/lisa/data/dogs_vs_cats/train'
 save_path = '/data/lisatmp3/pezeshki'

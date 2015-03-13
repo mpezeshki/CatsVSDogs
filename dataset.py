@@ -1,14 +1,15 @@
+# credits to Bart van Merrienboer
 import os
 
 import h5py
 
-from fuel import config
 from fuel.datasets import IndexableDataset
 from fuel.utils import do_not_pickle_attributes
 
 @do_not_pickle_attributes('f')
 class DogsVsCats(IndexableDataset):
     provides_sources = ('features', 'targets')
+    data_path = 'data/lisatmp3/pezeshki'
 
     def __init__(self, which_set):
         if which_set == 'train':
@@ -25,7 +26,7 @@ class DogsVsCats(IndexableDataset):
         self.load()
 
     def load(self):
-        self.f = h5py.File(os.path.join(config.data_path, 'dogs_vs_cats',
+        self.f = h5py.File(os.path.join(data_path, 'dogs_vs_cats',
             'dogs_vs_cats.hdf5'))
 
     @property
