@@ -25,7 +25,7 @@ class DogsVsCats(IndexableDataset):
         self.load()
 
     def load(self):
-        self.f = h5py.File(os.path.join(config.data_path, 'cats_vs_dogs',
+        self.f = h5py.File(os.path.join(config.data_path, 'dogs_vs_cats',
             'dogs_vs_cats.hdf5'))
 
     @property
