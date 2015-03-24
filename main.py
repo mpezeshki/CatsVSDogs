@@ -1,133 +1,130 @@
-######################
-# Model construction #
-######################
-
-from theano import tensor
-
-from blocks.bricks import Rectifier, MLP, Softmax
-from blocks.bricks.cost import MisclassificationRate
-from blocks.bricks.conv import ConvolutionalLayer, ConvolutionalSequence
-from blocks.bricks.conv import MaxPooling, ConvolutionalActivation, Flattener
-from blocks.initialization import IsotropicGaussian, Constant, Uniform
+# Credits to Kyle Kastner
+from load_data import load_color
+import numpy as np
+import theano
+import theano.tensor as T
+from convnet import (conv_layer, fc_layer,
+                     softmax_layer, cross_entropy,
+                     minibatch_indices)
+from utils import gradient_updates_momentum
 
 
-import logging
-logging.basicConfig()
+print "Building model ..."
+X = T.tensor4('X')
+y = T.ivector('y')
+params = []
+rng = np.random.RandomState(1999)
 
-serialize_path = '/data/lisatmp3/pezeshki/serialize'
-dumping_path = '/data/lisatmp3/pezeshki/dumps'
+# n_filters, n_channels, kernel_width, kernel_height
+filter_shape = (32, 3, 5, 5)
+pool_shape = (2, 2)
+stride = (1, 1)
+out, l_params = conv_layer(X, filter_shape, pool_shape, stride, rng)
+params += l_params
 
+filter_shape = (32, filter_shape[0], 5, 5)
+pool_shape = (2, 2)
+stride = (1, 1)
+out, l_params = conv_layer(out, filter_shape, pool_shape, stride, rng)
+params += l_params
 
-x = tensor.tensor4('features')
-y = tensor.lmatrix('targets')
+filter_shape = (64, filter_shape[0], 5, 5)
+pool_shape = (2, 2)
+stride = (1, 1)
+out, l_params = conv_layer(out, filter_shape, pool_shape, stride, rng)
+params += l_params
 
-# Convolutional layers
+filter_shape = (64, filter_shape[0], 4, 4)
+pool_shape = (2, 2)
+stride = (1, 1)
+out, l_params = conv_layer(out, filter_shape, pool_shape, stride, rng)
+params += l_params
 
-conv_layers = [ConvolutionalActivation(Rectifier().apply, (3, 3), 32),
-               ConvolutionalActivation(Rectifier().apply, (3, 3), 32),
-               MaxPooling((2, 2)), 
-               ConvolutionalActivation(Rectifier().apply, (3, 3), 64),
-               ConvolutionalActivation(Rectifier().apply, (3, 3), 64),
-               MaxPooling((2, 2)), 
-               ConvolutionalActivation(Rectifier().apply, (3, 3), 128),
-               ConvolutionalActivation(Rectifier().apply, (3, 3), 128),
-               MaxPooling((2, 2)),
-               ConvolutionalActivation(Rectifier().apply, (3, 3), 256),
-               ConvolutionalActivation(Rectifier().apply, (3, 3), 256),
-               MaxPooling((2, 2)),
-               ConvolutionalActivation(Rectifier().apply, (3, 3), 512),
-               ConvolutionalActivation(Rectifier().apply, (3, 3), 512),
-               MaxPooling((2, 2)),
-               ConvolutionalActivation(Rectifier().apply, (3, 3), 512),
-               ConvolutionalActivation(Rectifier().apply, (3, 3), 512)]
-convnet = ConvolutionalSequence(conv_layers, num_channels=3,
-                                image_size=(260, 260),
-                                weights_init=Uniform(0, 0.2),
-                                biases_init=Constant(-0.01))
-convnet.initialize()
-print convnet.get_dim('output')
-# Fully connected layers
+filter_shape = (128, filter_shape[0], 4, 4)
+pool_shape = (2, 2)
+stride = (1, 1)
+out, l_params = conv_layer(out, filter_shape, pool_shape, stride, rng)
+params += l_params
 
-features = Flattener().apply(convnet.apply(x))
+filter_shape = (256, filter_shape[0], 4, 4)
+pool_shape = (2, 2)
+stride = (1, 1)
+out, l_params = conv_layer(out, filter_shape, pool_shape, stride, rng)
+params += l_params
 
-mlp = MLP(activations=[Rectifier(), None],
-          dims=[512, 256, 2], weights_init=Uniform(0, 0.2),
-          biases_init=Constant(0.))
-mlp.initialize()
-y_hat = mlp.apply(features)
+shp = out.shape
+out = out.reshape((shp[0], shp[1] * shp[2] * shp[3]))  # flatten
 
-# Numerically stable softmax
-#cost = Softmax().categorical_cross_entropy(y, y_hat)
-#cost.name = 'nll'
-y = y.flatten()
-misclass = MisclassificationRate().apply(y, y_hat)
-misclass.name = 'error_rate'
+shape = (256, 256)
+out, l_params = fc_layer(out, shape, rng)
+params += l_params
 
-cost = Softmax().categorical_cross_entropy(y, y_hat)
-# z = y_hat - y_hat.max(axis=1).dimshuffle(0, 'x')
-# log_prob = z - tensor.log(tensor.exp(z).sum(axis=1).dimshuffle(0, 'x'))
-# flat_log_prob = log_prob.flatten()
-# range_ = tensor.arange(y.shape[0])
-# flat_indices = y.flatten() + range_ * 2
-# log_prob_of = flat_log_prob[flat_indices].reshape(y.shape, ndim=2)
-# cost = -log_prob_of.mean()
-cost.name = 'nll'
+shape = (shape[1], 256)
+out, l_params = fc_layer(out, shape, rng)
+params += l_params
 
-# Print sizes to check
-print("Representation sizes:")
-for layer in convnet.layers:
-    print(layer.get_dim('input_'))
-    print(layer.get_dim('output'))
+shape = (shape[1], 2)
+out, l_params = softmax_layer(out, shape, rng)
+params += l_params
 
-############
-# Training #
-############
+cost = cross_entropy(out, y)
+# NaNs
+# cost = cost + 0.1 * T.sum([T.sum(grad_i ** 2) for grad_i in grads])
+# grads = T.grad(cost, params)
+print "Building done.\n"
 
-from blocks.main_loop import MainLoop
-from blocks.graph import ComputationGraph
-from blocks.extensions import FinishAfter
-from blocks.algorithms import GradientDescent, Momentum
-from blocks.extensions import Printing, SimpleExtension
-from blocks.extensions.plot import Plot
-from blocks.extensions.saveload import SerializeMainLoop
-from blocks.extensions.monitoring import DataStreamMonitoring
-from blocks.extensions.monitoring import TrainingDataMonitoring
+print "Loading data ..."
+X_t, y_t = load_color()
+shp = X_t.shape
+print shp
+# -1 in reshape denotes unknown dimension
+X_train = X_t.reshape(25000, -1).astype('uint8')
+mean = X_train.mean(axis=0, keepdims=True)
+std = X_train.std(axis=0, keepdims=True)
+##X_t = (X_t[:].reshape(len(X_t), -1) - mean) / std
+#X_t = X_t.reshape(*shp)
+print "Data loaded.\n"
 
-from dataset import DogsVsCats
-from streams import RandomPatch
-from extensions import MyLearningRateSchedule, EarlyStoppingDump
-from fuel.streams import DataStream
-from fuel.schemes import SequentialScheme, ShuffledScheme
+print "Training model ..."
+minibatch_size = 10
+learning_rate = 0.01 / minibatch_size
+momentum = 0.9
 
-batch_size = 64
-training_stream = DataStream(DogsVsCats('train'),
-  iteration_scheme=ShuffledScheme(20000, batch_size))
-training_stream = RandomPatch(training_stream, 270, (260, 260))
+updates = gradient_updates_momentum(cost, params, learning_rate, momentum)
+# updates = [(param_i, param_i - learning_rate * grad_i)
+#           for param_i, grad_i in zip(params, grads)]
 
-valid_stream = DataStream(DogsVsCats('valid'),
-                iteration_scheme=SequentialScheme(2000, batch_size))
-valid_stream = RandomPatch(valid_stream, 270, (260, 260))
+train_function = theano.function([X, y], cost, updates=updates)
+predict_function = theano.function([X], out)
+epochs = 100
+for n in range(epochs):
+    loss = []
+    for i, j in minibatch_indices(X_t, minibatch_size, lb=0, ub=20000):
+        X_nt = X_t[i:j]
+        # Random horizontal flips with probability 0.5
+        flip_idx = np.where(rng.rand(len(X_nt)) > 0.5)[0]
+        X_nt[flip_idx] = X_nt[flip_idx][:, :, :, ::-1]
+        l = train_function(X_nt, y_t[i:j])
+        loss.append(l)
+    loss = np.mean(loss)
+    train_y_pred = []
+    for i, j in minibatch_indices(X_t, minibatch_size, lb=0, ub=20000):
+        train_y_hat = predict_function(X_t[i:j])
+        y_p = np.argmax(train_y_hat, axis=1)
+        train_y_pred.extend(list(y_p))
+    valid_y_pred = []
+    for i, j in minibatch_indices(X_t, minibatch_size, lb=20000, ub=25000):
+        valid_y_hat = predict_function(X_t[i:j])
+        y_p = np.argmax(valid_y_hat, axis=1)
+        valid_y_pred.extend(list(y_p))
+    train_y_pred = np.array(train_y_pred)
+    valid_y_pred = np.array(valid_y_pred)
 
-cg = ComputationGraph([cost])
-algorithm = GradientDescent(cost=cost, params=cg.parameters, step_rule=Momentum(learning_rate=1e-4,
-                                                          momentum=0.9))
-
-main_loop = MainLoop(
-    data_stream=training_stream, algorithm=algorithm,
-    extensions=[
-        FinishAfter(after_n_epochs=200),
-        TrainingDataMonitoring(
-            [cost, misclass],
-            prefix='train',
-            after_every_epoch=True),
-        DataStreamMonitoring(
-            [cost, misclass],
-            valid_stream,
-            prefix='valid'),
-        SerializeMainLoop('dogs_vs_cats.pkl', after_every_epoch=True),
-        EarlyStoppingDump('/home/user/Documents/ift6266', 'valid_nll'),
-        MyLearningRateSchedule('valid_nll', 2),
-        Printing()
-    ]
-)
-main_loop.run()
+    print("Epoch %i" % n)
+    print("Train Accuracy % f" % np.mean((y_t[0:20000].flatten() ==
+                                          train_y_pred.flatten()).astype(
+                                              "float32")))
+    print("Valid Accuracy % f" % np.mean((y_t[20000:25000].flatten() ==
+                                          valid_y_pred.flatten()).astype(
+                                              "float32")))
+    print("Loss %f" % loss)
