@@ -16,37 +16,19 @@ params = []
 rng = np.random.RandomState(1999)
 
 # n_filters, n_channels, kernel_width, kernel_height
-filter_shape = (32, 3, 5, 5)
+filter_shape = (32, 3, 3, 3)
 pool_shape = (2, 2)
-stride = (1, 1)
+stride = (2, 2)
 out, l_params = conv_layer(X, filter_shape, pool_shape, stride, rng)
 params += l_params
 
-filter_shape = (32, filter_shape[0], 5, 5)
+filter_shape = (64, filter_shape[0], 2, 2)
 pool_shape = (2, 2)
 stride = (1, 1)
 out, l_params = conv_layer(out, filter_shape, pool_shape, stride, rng)
 params += l_params
 
-filter_shape = (64, filter_shape[0], 5, 5)
-pool_shape = (2, 2)
-stride = (1, 1)
-out, l_params = conv_layer(out, filter_shape, pool_shape, stride, rng)
-params += l_params
-
-filter_shape = (64, filter_shape[0], 4, 4)
-pool_shape = (2, 2)
-stride = (1, 1)
-out, l_params = conv_layer(out, filter_shape, pool_shape, stride, rng)
-params += l_params
-
-filter_shape = (128, filter_shape[0], 4, 4)
-pool_shape = (2, 2)
-stride = (1, 1)
-out, l_params = conv_layer(out, filter_shape, pool_shape, stride, rng)
-params += l_params
-
-filter_shape = (256, filter_shape[0], 4, 4)
+filter_shape = (128, filter_shape[0], 2, 2)
 pool_shape = (2, 2)
 stride = (1, 1)
 out, l_params = conv_layer(out, filter_shape, pool_shape, stride, rng)
@@ -55,11 +37,11 @@ params += l_params
 shp = out.shape
 out = out.reshape((shp[0], shp[1] * shp[2] * shp[3]))  # flatten
 
-shape = (256, 256)
+shape = (512, 128)
 out, l_params = fc_layer(out, shape, rng)
 params += l_params
 
-shape = (shape[1], 256)
+shape = (shape[1], 64)
 out, l_params = fc_layer(out, shape, rng)
 params += l_params
 
@@ -78,11 +60,11 @@ X_t, y_t = load_color()
 shp = X_t.shape
 print shp
 # -1 in reshape denotes unknown dimension
-X_train = X_t.reshape(25000, -1).astype('uint8')
+X_train = X_t[:20000].reshape(20000, -1).astype('uint8')
 mean = X_train.mean(axis=0, keepdims=True)
 std = X_train.std(axis=0, keepdims=True)
-##X_t = (X_t[:].reshape(len(X_t), -1) - mean) / std
-#X_t = X_t.reshape(*shp)
+X_t = (X_t[:].reshape(len(X_t), -1) - mean) / std
+X_t = X_t.reshape(*shp)
 print "Data loaded.\n"
 
 print "Training model ..."
